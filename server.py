@@ -9,6 +9,11 @@ STANDART_URLS = {
     '/favicon.ico': ''
 }
 
+address = 'localhost'
+port = 5000
+package_size = 1024
+closing_sequence = b'\r\n\r\n'
+
 def generate_headers(method, url):
     if method != 'GET':
         return '<body><h1>Method not allowed.</h1></body>', 405
@@ -30,7 +35,24 @@ def generate_response(request):
     headers, code = generate_headers(method, url)
     return headers.encode()
 
-
+def listen_clients(connection, client_address):
+    data_lst = []
+    while True:
+        #Цикл отвечающий за приём целого сообщения
+        try:
+            buff = connection.recv(package_size)
+        except ConnectionError:
+            break
+        if not buff:
+            break
+        data_lst.append(buff.decode('utf-8'))
+        if not buff.endswith(closing_sequence):
+            continue
+        data = ''.join(data_lst)[:-len(closing_sequence)]
+        data_lst.clear()
+        #Payload
+        response = generate_response(data)
+        connection.sendto(response, client_address)
 
 def run():
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -38,29 +60,20 @@ def run():
     #Need to delete in prodaction?
     server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
-    server_socket.bind(('localhost', 5000))
+    server_socket.bind((address, port))
     server_socket.listen(5)
 
-    quit = False
     print('Server Started.')
 
-    while not quit:
+    while True:
+        #Цикл отвечающий за работу сервера
         try:
-            client_socket, addr = server_socket.accept()
-            request = client_socket.recv(1024)
-            print(request)
-            print(addr)
+            connection, client_address = server_socket.accept()
+        except OSError:
+            break
+        listen_clients(connection, client_address)
+        #response = generate_response(request.decode('utf-8'))
 
-            response = generate_response(request.decode('utf-8'))
-            print(response)
-
-            client_socket.sendto(response, addr)
-            client_socket.close()
-
-        except Exception as ex:
-            print(ex)
-            print('Server Stopped.')
-            quit = True
 
 if __name__ == '__main__':
     run()
